@@ -1,6 +1,5 @@
 # =========================================================
 # model_utils.py
-# ML Logic for Training & Unlearning
 # =========================================================
 
 import numpy as np
@@ -10,19 +9,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 
 
-# =========================================================
-# BASELINE MODEL
-# =========================================================
+# ================= BASELINE =================
 def train_baseline(df):
 
     X = df['clean_text']
     y = df['label']
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=0.2,
-        random_state=42,
-        stratify=y
+        X, y, test_size=0.2, random_state=42, stratify=y
     )
 
     tfidf = TfidfVectorizer(max_features=3000, stop_words='english')
@@ -33,15 +27,12 @@ def train_baseline(df):
     model = LogisticRegression(max_iter=1000)
     model.fit(X_train_vec, y_train)
 
-    y_pred = model.predict(X_test_vec)
-    acc = accuracy_score(y_test, y_pred)
+    acc = accuracy_score(y_test, model.predict(X_test_vec))
 
     return model, tfidf, X_train_vec, X_test_vec, y_train, y_test, acc
 
 
-# =========================================================
-# MIA (PRIVACY CHECK)
-# =========================================================
+# ================= MIA =================
 def compute_mia(model, X_train_vec, X_test_vec):
 
     train_probs = model.predict_proba(X_train_vec)[:, 1]
@@ -56,26 +47,19 @@ def compute_mia(model, X_train_vec, X_test_vec):
     attack_model = LogisticRegression()
     attack_model.fit(attack_X, attack_y)
 
-    mia_acc = accuracy_score(attack_y, attack_model.predict(attack_X))
-
-    return mia_acc
+    return accuracy_score(attack_y, attack_model.predict(attack_X))
 
 
-# =========================================================
-# UNLEARNING MODEL (STRONG PRIVACY)
-# =========================================================
+# ================= UNLEARNING =================
 def unlearn_model(df, target_user):
 
-    df_unlearn = df[df['UserId'] != target_user]
+    df_u = df[df['UserId'] != target_user]
 
-    X = df_unlearn['clean_text']
-    y = df_unlearn['label']
+    X = df_u['clean_text']
+    y = df_u['label']
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=0.2,
-        random_state=42,
-        stratify=y
+        X, y, test_size=0.2, random_state=42, stratify=y
     )
 
     tfidf = TfidfVectorizer(max_features=3000, stop_words='english')
@@ -92,30 +76,18 @@ def unlearn_model(df, target_user):
 
     model.fit(X_train_vec, y_train)
 
-    # 🔥 Noise injection (privacy boost)
+    # Noise injection
     model.coef_ += np.random.normal(0, 0.02, model.coef_.shape)
 
-    y_pred = model.predict(X_test_vec)
-    acc = accuracy_score(y_test, y_pred)
+    acc = accuracy_score(y_test, model.predict(X_test_vec))
 
-    return model, tfidf, X_train_vec, X_test_vec, y_train, y_test, acc
+    return model, tfidf, X_train_vec, X_test_vec, acc
 
 
-# =========================================================
-# CONFIDENCE DROP
-# =========================================================
-def compute_confidence_drop(
-    baseline_model, unlearned_model,
-    tfidf_old, tfidf_new,
-    sample_text
-):
+# ================= CONFIDENCE DROP =================
+def compute_confidence_drop(model1, model2, tfidf1, tfidf2, sample_text):
 
-    before = baseline_model.predict_proba(
-        tfidf_old.transform(sample_text)
-    )[:, 1]
+    p1 = model1.predict_proba(tfidf1.transform(sample_text))[:, 1]
+    p2 = model2.predict_proba(tfidf2.transform(sample_text))[:, 1]
 
-    after = unlearned_model.predict_proba(
-        tfidf_new.transform(sample_text)
-    )[:, 1]
-
-    return np.mean(np.abs(before - after))
+    return np.mean(np.abs(p1 - p2))
