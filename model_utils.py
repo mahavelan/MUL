@@ -1,5 +1,5 @@
 # =========================================================
-# model_utils.py
+# model_utils.py (MULTI-RULE VERSION)
 # =========================================================
 
 import numpy as np
@@ -29,7 +29,7 @@ def train_baseline(df):
 
     acc = accuracy_score(y_test, model.predict(X_test_vec))
 
-    return model, tfidf, X_train_vec, X_test_vec, y_train, y_test, acc
+    return model, tfidf, X_train_vec, X_test_vec, acc
 
 
 # ================= MIA =================
@@ -50,10 +50,30 @@ def compute_mia(model, X_train_vec, X_test_vec):
     return accuracy_score(attack_y, attack_model.predict(attack_X))
 
 
-# ================= UNLEARNING =================
-def unlearn_model(df, target_user):
+# ================= MULTI-RULE UNLEARNING =================
+def apply_unlearning_rules(df, users=None, label=None, keyword=None):
 
-    df_u = df[df['UserId'] != target_user]
+    df_u = df.copy()
+
+    # Rule 1: Multiple Users
+    if users and len(users) > 0:
+        df_u = df_u[~df_u['UserId'].isin(users)]
+
+    # Rule 2: Label
+    if label is not None:
+        df_u = df_u[df_u['label'] != label]
+
+    # Rule 3: Keyword
+    if keyword and keyword.strip() != "":
+        df_u = df_u[
+            ~df_u['clean_text'].str.contains(keyword, case=False, na=False)
+        ]
+
+    return df_u
+
+
+# ================= UNLEARN MODEL =================
+def train_unlearned_model(df_u):
 
     X = df_u['clean_text']
     y = df_u['label']
@@ -76,7 +96,7 @@ def unlearn_model(df, target_user):
 
     model.fit(X_train_vec, y_train)
 
-    # Noise injection
+    # 🔥 Noise injection
     model.coef_ += np.random.normal(0, 0.02, model.coef_.shape)
 
     acc = accuracy_score(y_test, model.predict(X_test_vec))
